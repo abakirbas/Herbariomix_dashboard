@@ -49,4 +49,4 @@ po/*~
 rsconnect/
 
 # secrets file
-/.secrets
+.secrets
