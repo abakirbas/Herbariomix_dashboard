@@ -59,7 +59,8 @@ sidebar <- dashboardSidebar(
   sidebarMenu(
     menuItem("About", tabName = "about"),
     menuItem("Workflow stats", tabName = "stats"),
-    menuItem("Progress", tabName = "progress")
+    menuItem("Progress", tabName = "progress"),
+    menuItem("Digi Progress", tabName = "digi_progress")
   )
 )
 
@@ -72,14 +73,17 @@ body <- dashboardBody(
     ),
     tabItem(tabName = "stats",
             h2("Progress by each step of the workflow"),
-            h4(""),
             DT::dataTableOutput("data_table"),
             h2("Digitization progress"),                 # New header for the second table
             DT::dataTableOutput("digitization_table") # Output for the second table
     ),
     tabItem(tabName = "progress",
-            h2("Progress"),
+            h2("Workflow progress"),
             uiOutput("plots_ui_progress")
+    ),
+    tabItem(tabName = "digi_progress",
+            h2("Digitization progress by family"),
+            uiOutput("digitization_plots_ui")
     )
   )
 )
@@ -179,6 +183,7 @@ server <- function(input, output) {
   
   colnames(dat) <- c("Step", "Number of species completed", "Number of species remaining", "Number of specimens completed", 
                      "Number of specimens remaining", "Completed species (%)", "Remaining species (%)", "Completed specimens (%)", "Remaining specimens (%)")
+
   
   # Render the plots dynamically in the UI
   output$plots_ui_progress <- renderUI({
@@ -210,6 +215,112 @@ server <- function(input, output) {
       # Render specimens plot
       output[[paste0("specimens_plot_", my_i)]] <- renderPlot({
         specimens_pie_charts[[my_i]]
+      })
+    })
+  }
+  
+  # Create list to store plots for digitization progress
+  digitization_charts <- list()
+  
+  # Calculate the maximum value of "Records transcribed" across all data
+  max_y <- max(digitization_records$`Records transcribed`, na.rm = TRUE)
+  
+  # Get the list of unique families
+  families <- unique(digitization_records$Family)
+  
+  # Loop over each family
+  for (i in seq_along(families)) {
+    family <- families[i]
+    
+    # Subset data for the current family
+    data_family <- digitization_records[digitization_records$Family == family, ]
+    
+    # Calculate the number of bars (genera) for this family
+    num_genus <- nrow(data_family)
+    
+    # Adjust the aspect ratio based on the number of genera
+    aspect_ratio <- max(1, 3 / num_genus)
+    
+    # Create the plot using ggpubr's ggbarplot
+    plot <- ggbarplot(
+      data_family,
+      x = "Genus",
+      y = "Records transcribed",
+      fill = "Genus",
+      color = "Genus",
+      label = TRUE,               # Add value labels on top of bars
+      lab.vjust = -0.5,           # Adjust vertical position of labels
+      width = 0.5,                # Adjust bar width
+      ylim = c(0, max_y * 1.1),   # Set consistent y-axis limits
+      x.text.angle = 45,          # Rotate x-axis text
+      ggtheme = theme_classic()   # Set the theme (you can choose another theme if desired)
+    ) +
+      font("y.text", size = 14) +  # Adjust font size of y axis tick labels
+      font("x.text", size = 12) + # Adjust font size of x axis tick labels
+      font("xy.title", size = 12) + # Adjust font size of x and y axis names
+      theme(
+        aspect.ratio = aspect_ratio,
+        plot.margin = margin(10, 10, 10, 10),
+        legend.position = "none"  # Remove the legend
+      ) +
+      labs(
+        x = "Genus",
+        y = "Number of Records"
+      )
+    
+    # Store plots in the list I created earlier
+    digitization_charts[[i]] <- plot
+  }
+  
+  # Dynamically generate UI elements for the digitization plots
+  output$digitization_plots_ui <- renderUI({
+    plot_output_list <- list()
+    num_plots <- length(digitization_charts)
+    row_elements <- list()
+    accumulated_width <- 0
+    
+    for (i in seq(1, num_plots)) {
+      plotname <- paste0("digitization_plot_", i)
+      num_genus <- nrow(digitization_charts[[i]]$data)
+      
+      # Determine box width based on number of genera
+      box_width <- if (num_genus <= 2) {
+        2
+      } else if (num_genus <= 8) {
+        4
+      } else {
+        6
+      }
+      
+      # Create the box
+      plot_box <- box(
+        title = families[i], status = "primary", solidHeader = TRUE, width = box_width,
+        plotOutput(outputId = plotname, height = 400)
+      )
+      
+      # Add the box to the current row
+      row_elements[[length(row_elements) + 1]] <- plot_box
+      accumulated_width <- accumulated_width + box_width
+      
+      # Check if the row is full or if it's the last plot
+      if (accumulated_width >= 12 || i == num_plots) {
+        # Add the row to the plot_output_list
+        plot_output_list[[length(plot_output_list) + 1]] <- fluidRow(row_elements)
+        # Reset for the next row
+        row_elements <- list()
+        accumulated_width <- 0
+      }
+    }
+    do.call(tagList, plot_output_list)
+  })
+  
+  # Render each plot in the digitization_charts list
+  for (i in 1:length(digitization_charts)) {
+    local({
+      my_i <- i
+      plotname <- paste0("digitization_plot_", my_i)
+      output[[plotname]] <- renderPlot({
+        digitization_charts[[my_i]]
       })
     })
   }
