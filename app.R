@@ -58,9 +58,9 @@ sidebar <- dashboardSidebar(
   width = 250,
   sidebarMenu(
     menuItem("About", tabName = "about"),
-    menuItem("Workflow stats", tabName = "stats"),
-    menuItem("Progress", tabName = "progress"),
-    menuItem("Digi Progress", tabName = "digi_progress")
+    menuItem("Stats", tabName = "stats"),
+    menuItem("Genomics Progress", tabName = "progress"),
+    menuItem("Digitization Progress", tabName = "digi_progress")
   )
 )
 
@@ -125,7 +125,22 @@ server <- function(input, output) {
   output$digitization_table <- DT::renderDataTable({
     DT::datatable(
       digitization_records,
-      options = list(dom = 't', scrollX = TRUE)
+      extensions = 'Buttons',
+      options = list( 
+        dom = "Blfrtip"
+        , buttons = 
+          list("copy", list(
+            extend = "collection"
+            , buttons = c("csv", "excel", "pdf")
+            , text = "Download"
+          ) ) # end of buttons customization
+        
+        # customize the length menu
+        , lengthMenu = list( c(10, 20, -1) # declare values
+                             , c(10, 20, "All") # declare titles
+        ) # end of lengthMenu customization
+        , pageLength = 10
+      ) # end of options
     )
   })
   
@@ -184,7 +199,6 @@ server <- function(input, output) {
   colnames(dat) <- c("Step", "Number of species completed", "Number of species remaining", "Number of specimens completed", 
                      "Number of specimens remaining", "Completed species (%)", "Remaining species (%)", "Completed specimens (%)", "Remaining specimens (%)")
 
-  
   # Render the plots dynamically in the UI
   output$plots_ui_progress <- renderUI({
     plot_output_list <- lapply(1:length(species_pie_charts), function(i) {
